@@ -1,0 +1,41 @@
+# 工作流状态机 v0.1（模板）
+# 链路1（试点）：新增一张表的采集同步
+# 链路2（暂缓）：新增一个实时指标（〈机械Gate脚本〉做机械 Gate）
+# 落地时把〈机械Gate脚本〉替换为实际脚本名；治理不变量以骨架纪律为单一事实源
+
+chains:
+  table-sync:                     # 链路1：采集
+    segments:
+      - id: s1-clarify-caliber    # 澄清+口径：同步类型/检查列/断点策略
+        gate: G1-caliber-sign     # 人拍板：口径卡（同步类型、幂等策略）签字
+        skill: caliber-spec
+      - id: s2-profile-plan       # 探查+方案：保留字/检查列/NULL率/行数基线 + 落地方案
+        gate: G2-plan             # 人拍板：方案取舍
+        skill: source-profile
+      - id: s3-build-verify       # 实现+验证：meta行/脚本参数/首跑/幂等
+        gates:
+          - MG-mechanical         # 机：对账diff=0、重跑count不变、控制表断点值单调
+          - IR-review             # 语：独立复核（acceptance.md 逐条 pass/fail）
+        skill: table-sync
+      - id: s4-deliver-retro      # 交付+复盘：文档更新（FR表/问题清单）+ 归因回写
+        gate: G3-release          # 人拍板：交付 + retro_required
+        skill: delivery-check
+
+  metric-realtime:                # 链路2：实时指标（试点1走稳后启用）
+    enabled: false
+    mechanical_gate: 〈机械Gate脚本〉
+
+rules:
+  state_file: state.json          # 状态落盘，不落聊天记录
+  max_retries_per_gate: 2
+  on_exceed: escalate             # 出升级包（≤3选项+代价+推荐），不硬扛
+  escalation_format: 5分钟可裁决
+  escalation_budget_per_task: 3   # 升级包单均预算≤3；超=标准缺口信号（归因A类）
+  retro_required: true            # 复盘没做，G3 不给过
+  reviewer_context: [acceptance.md, 原始需求, 产出物路径]   # 三样，多一样都不给
+  conflict_arbitration: 机械 fail 只能被人判豁免，禁止被语义 pass 静默吞掉；冲突留痕走 Gate
+  reentry_gate_resign: 回退使 Gate 裁决对象变化→原签字作废须重签（升级包列明变化点）；未变则有效；留痕 state.json
+  promotion_requires_coverage: 晋升需覆盖审计通过——N 单覆盖 evals 失败模式，不只数通过
+  long_task: 前台命令>2min 必须 nohup 后台化     # 杀 FM-A10
+  remote_sql: 禁止反引号嵌套双引号 heredoc，先 dry-run  # 杀 FM-A01/FM-A09
+  regression: 改任何脚本前先跑 evals/score.py，改完再跑  # 杀 FM-B03
